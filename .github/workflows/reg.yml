@@ -14,7 +14,7 @@ permissions:
 jobs:
   main:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
       with:
@@ -73,14 +73,12 @@ jobs:
             s.headers.update(HD)
             try:
                 r = s.post(f"{fm}/api/auth/send-otp", json={"email": em}, timeout=10)
-                if r.status_code == 403:
-                    return "blocked"
-                if r.status_code != 200 or not r.json().get("ok"):
-                    return None
+                if r.status_code == 403: return "blocked"
+                if r.status_code != 200 or not r.json().get("ok"): return None
             except: return None
-            time.sleep(4)
+            time.sleep(3)
             code = None
-            for _ in range(6):
+            for _ in range(5):
                 try:
                     ir = rq.get(f"{ge}/{em}", headers=UA, timeout=10)
                     tm = re.search(r'<title>(.*?)</title>', ir.text)
@@ -113,39 +111,33 @@ jobs:
                 return r2.status_code in (200, 201)
             except: return False
 
+        t0 = time.time()
         print("Discovering domains...")
-        all_domains = discover_domains()
-        random.shuffle(all_domains)
-        print(f"Found {len(all_domains)} domains")
+        all_d = discover_domains()
+        random.shuffle(all_d)
+        print(f"Found {len(all_d)} domains ({time.time()-t0:.0f}s)")
 
-        if not all_domains:
-            print("No domains, aborting")
-            exit(0)
+        if not all_d:
+            print("No domains"); exit(0)
 
-        accs = []
-        blocked = set()
-        for i in range(20):
-            if len(accs) >= 20: break
-            for d in all_domains:
+        accs, blocked = [], set()
+        for i in range(15):
+            if len(accs) >= 15: break
+            for d in all_d:
                 if d in blocked: continue
                 try:
                     res = try_reg(d)
                     if res == "blocked":
-                        blocked.add(d)
-                        print(f"  blocked: {d}")
-                        continue
+                        blocked.add(d); continue
                     if res:
-                        print(f"[{len(accs)+1}] {res['email']} ({d})")
-                        accs.append(res)
-                        break
+                        print(f"[{len(accs)+1}] {res['email']} ({d}) [{time.time()-t0:.0f}s]")
+                        accs.append(res); break
                 except: pass
-                time.sleep(0.5)
-            time.sleep(0.5)
+                time.sleep(0.3)
+            time.sleep(0.3)
 
-        print(f"Total: {len(accs)}")
-        if not accs:
-            print("0 accounts, exit")
-            exit(0)
+        print(f"Total: {len(accs)} in {time.time()-t0:.0f}s")
+        if not accs: exit(0)
 
         # Telegraph
         ct = [{"tag":"h3","children":["FreeModel Free Accounts"]},
@@ -174,8 +166,8 @@ jobs:
                     state["p"] = d["result"]["path"]
                     print(f"Telegraph: https://telegra.ph/{d['result']['path']}")
                     break
-                else: pp = ""; time.sleep(2)
-            except: time.sleep(2)
+                else: pp = ""; time.sleep(1)
+            except: time.sleep(1)
 
         try:
             with open("st.json","w") as f: json.dump(state, f)
@@ -203,6 +195,4 @@ jobs:
 
         if push_file(f"accounts/{ds}.txt", final):
             print(f"Saved: accounts/{ds}.txt")
-        else:
-            print("Failed to save text file")
         Q
