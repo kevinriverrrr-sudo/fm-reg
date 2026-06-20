@@ -10,7 +10,7 @@ permissions:
 jobs:
   main:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 6
     steps:
     - uses: actions/checkout@v4
       with:
@@ -28,7 +28,6 @@ jobs:
         python3 << 'Q'
         import requests as rq, re, time, json, random, string, os
         from datetime import datetime, timezone, timedelta
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         MSK = timezone(timedelta(hours=3))
         now = datetime.now(MSK)
@@ -53,56 +52,37 @@ jobs:
         repo = os.environ.get("GITHUB_REPOSITORY","")
 
         def ru():
-            p = random.choice(["u","a","t","n","d","x","z","w","k","m"])
-            return p + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            return random.choice(["u","a","t","n","d","x","z","w","k","m"]) + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
-        # probe: find working domains
-        def probe():
-            ok = []
-            for d in DM:
-                em = f"p{random.randint(10000,99999)}@{d}"
-                try:
-                    r = rq.post(f"{fm}/api/auth/send-otp", json={"email":em}, headers=HD, timeout=8)
-                    if r.status_code == 200 and r.json().get("ok"):
-                        ok.append(d)
-                    elif r.status_code != 403:
-                        ok.append(d)  # 429 might work with delay
-                except:
-                    pass
-            return ok
-
-        def reg(d):
+        def try_reg(d):
             em = f"{ru()}@{d}"
             s = rq.Session()
             s.headers.update(HD)
-            try:
-                r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=10)
-                if r.status_code != 200 or not r.json().get("ok"):
-                    return None
-                time.sleep(3)
-                code = None
-                for _ in range(7):
-                    try:
-                        ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=10)
-                        tm = re.search(r'<title>(.*?)</title>', ir.text)
-                        if tm and 'FreeModel' in tm.group(1):
-                            cm = re.search(r'(\d{6})', tm.group(1))
-                            if cm and cm.group(1) not in FP:
-                                code = cm.group(1)
-                                break
-                    except:
-                        pass
-                    time.sleep(2)
-                if not code:
-                    return None
-                vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=10)
-                if vr.status_code != 200 or "error" in vr.json():
-                    return None
-                bm = s.cookies.get("bm_session")
-                ts = datetime.now(MSK).strftime("%H:%M:%S")
-                return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
-            except:
+            r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=10)
+            if r.status_code != 200 or not r.json().get("ok"):
                 return None
+            time.sleep(3)
+            code = None
+            for _ in range(7):
+                try:
+                    ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=10)
+                    tm = re.search(r'<title>(.*?)</title>', ir.text)
+                    if tm and 'FreeModel' in tm.group(1):
+                        cm = re.search(r'(\d{6})', tm.group(1))
+                        if cm and cm.group(1) not in FP:
+                            code = cm.group(1)
+                            break
+                except:
+                    pass
+                time.sleep(2)
+            if not code:
+                return None
+            vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=10)
+            if vr.status_code != 200 or "error" in vr.json():
+                return None
+            bm = s.cookies.get("bm_session")
+            ts = datetime.now(MSK).strftime("%H:%M:%S")
+            return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
 
         def push_file(filepath, content):
             try:
@@ -110,74 +90,56 @@ jobs:
                 r = rq.get(url, headers=GH, timeout=10)
                 sha = r.json().get("sha","") if r.status_code == 200 else ""
                 rq.put(url, headers=GH, timeout=15, json={
-                    "message":f"update {filepath}",
+                    "message":f"u {filepath}",
                     "content":__import__('base64').b64encode(content.encode()).decode(),
                     "sha": sha
                 })
+                return True
             except:
-                pass
+                return False
 
-        # Step 1: Probe domains
-        wd = probe()
-        print(f"Working domains: {wd}")
-        if not wd:
-            print("No working domains!")
-            exit(0)
-
-        # Step 2: Register with controlled parallelism
+        # Register: try each domain with delay, cycle through
         accs = []
-        # Phase 1: sequential on best domain (gmailxsn usually)
-        if "gmailxsn.com" in wd:
-            for _ in range(5):
-                a = reg("gmailxsn.com")
-                if a:
-                    accs.append(a)
-                    print(f"  + {a['email']}")
-                time.sleep(2)
-
-        # Phase 2: parallel on all working domains
-        remaining = 20
-        with ThreadPoolExecutor(max_workers=len(wd)) as ex:
-            batch = []
-            for _ in range(remaining):
-                d = random.choice(wd)
-                batch.append(ex.submit(reg, d))
-            for f in as_completed(batch):
-                a = f.result()
-                if a:
-                    accs.append(a)
-                    print(f"  + {a['email']}")
+        for i in range(12):
+            a = None
+            for d in DM:
+                try:
+                    a = try_reg(d)
+                    if a:
+                        print(f"[{i+1}] {a['email']} ({d})")
+                        accs.append(a)
+                        break
+                except:
+                    pass
+                time.sleep(1)
+            if not a:
+                print(f"[{i+1}] failed")
+            time.sleep(1)
 
         if not accs:
             print("0 accounts")
             exit(0)
-
         print(f"Total: {len(accs)}")
 
-        # Step 3: Build telegra content
-        ct = [
-            {"tag":"h3","children":["FreeModel Free Accounts"]},
-            {"tag":"p","children":[f"Updated: {ds} ({now.strftime('%H:%M:%S')}) MSK"]},
-            {"tag":"hr"},
-        ]
+        # Telegraph
+        ct = [{"tag":"h3","children":["FreeModel Free Accounts"]},
+             {"tag":"p","children":[f"Updated: {ds} ({now.strftime('%H:%M:%S')}) MSK"]},
+             {"tag":"hr"}]
         for i, a in enumerate(accs):
             ct.append({"tag":"b","children":[f"{i+1}. {a['email']} ({a['ts']})"]})
             ct.append({"tag":"p","children":[a['cookie']]})
             ct.append({"tag":"hr"})
 
-        # telegra state
         state = {"d":"","p":""}
         try:
-            with open("st.json") as f:
-                state = json.load(f)
-        except:
-            pass
+            with open("st.json") as f: state = json.load(f)
+        except: pass
         if state["d"] != ds:
             state["d"] = ds
             state["p"] = ""
 
         pp = state.get("p","")
-        for attempt in range(3):
+        for _ in range(3):
             try:
                 if pp:
                     r = rq.post(f"{ta}/editPage", json={"access_token":TK,"path":pp,"title":f"FM {ds}","content":ct,"return_content":False}, timeout=15)
@@ -188,21 +150,13 @@ jobs:
                     state["p"] = d["result"]["path"]
                     print(f"Telegraph: https://telegra.ph/{d['result']['path']}")
                     break
-                else:
-                    pp = ""
-                    time.sleep(2)
-            except:
-                time.sleep(2)
+                else: pp = ""; time.sleep(2)
+            except: time.sleep(2)
 
-        with open("st.json","w") as f:
-            json.dump(state, f)
+        with open("st.json","w") as f: json.dump(state, f)
 
-        # Step 4: Build and push text file
-        lines = []
-        lines.append(f"FreeModel Free Accounts")
-        lines.append(f"Date: {ds} | Updated: {now.strftime('%H:%M:%S')} MSK")
-        lines.append(f"Telegraph: https://telegra.ph/{state['p']}")
-        lines.append("=" * 60)
+        # Text file
+        lines = [f"FreeModel Free Accounts",f"Date: {ds} | Updated: {now.strftime('%H:%M:%S')} MSK",f"Telegraph: https://telegra.ph/{state['p']}","=" * 60]
         for i, a in enumerate(accs):
             lines.append(f"\n[{i+1}] {a['email']}")
             lines.append(f"    Time: {a['ts']} MSK")
@@ -215,9 +169,11 @@ jobs:
             r = rq.get(f"https://api.github.com/repos/{repo}/contents/accounts%2F{ds}.txt", headers=GH, timeout=10)
             if r.status_code == 200:
                 existing = __import__('base64').b64decode(r.json()["content"]).decode()
-        except:
-            pass
+        except: pass
         final = existing + "\n\n---\n\n" + "\n".join(lines) if existing else "\n".join(lines)
-        push_file(f"accounts/{ds}.txt", final)
-        print(f"Saved: accounts/{ds}.txt")
+
+        if push_file(f"accounts/{ds}.txt", final):
+            print(f"Saved: accounts/{ds}.txt")
+        else:
+            print("Failed to save text file")
         Q
