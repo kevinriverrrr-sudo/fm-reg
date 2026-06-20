@@ -10,7 +10,7 @@ permissions:
 jobs:
   main:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -22,7 +22,7 @@ jobs:
         path: st.json
         key: fm-st
     - name: pip
-      run: pip install pynacl requests
+      run: pip install requests
     - name: Run
       env:
         TK: ${{ secrets.TG_TOKEN }}
@@ -43,31 +43,31 @@ jobs:
         DM = [
             "gmailxsn.com","paratrabajar.xyz","acqq.dev","alightmotion.cloud",
             "starcheck.in","cuaks.fun","dyera.studio","pawobby.cfd",
-            "xsnipersquad.site","zavmecor.store"
+            "xsnipersquad.site","zavmecor.store","aeerso.space","masbahlil.xyz",
+            "buyreview.us","xn-xp8h.bond"
         ]
         FP = {'140729','217821','357961','989898','808080','980099','206088','178198','501435'}
         TK = os.environ.get("TK", "")
-        HD = {"User-Agent":"Mozilla/5.0","Origin":fm,"Referer":fm+"/"}
+        HD = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36","Origin":fm,"Referer":fm+"/"}
 
         def ru():
             p = random.choice(["u","a","t","n","d","x","z","w","k","m"])
             return p + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
-        def reg(di):
+        def reg():
+            random.shuffle(DM)
             for d in DM:
-                if d in di:
-                    continue
                 em = f"{ru()}@{d}"
                 s = rq.Session()
                 s.headers.update({"Content-Type":"application/json",**HD})
                 try:
-                    r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=15)
+                    r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=12)
                     if r.status_code != 200 or not r.json().get("ok"):
                         continue
-                    time.sleep(4)
+                    time.sleep(3)
                     code = None
-                    for _ in range(10):
-                        ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=15)
+                    for _ in range(8):
+                        ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=12)
                         tm = re.search(r'<title>(.*?)</title>', ir.text)
                         if tm and 'FreeModel' in tm.group(1):
                             cm = re.search(r'(\d{6})', tm.group(1))
@@ -77,8 +77,7 @@ jobs:
                         time.sleep(2)
                     if not code:
                         continue
-                    time.sleep(1)
-                    vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=15)
+                    vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=12)
                     if vr.status_code != 200 or "error" in vr.json():
                         continue
                     bm = s.cookies.get("bm_session")
@@ -86,7 +85,6 @@ jobs:
                     return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
                 except:
                     continue
-                break
             return None
 
         state = {"d":"","p":""}
@@ -96,16 +94,13 @@ jobs:
         except:
             pass
 
-        np = False
         if state["d"] != ds:
             state["d"] = ds
             state["p"] = ""
-            np = True
 
-        blocked = set()
         accs = []
-        with ThreadPoolExecutor(max_workers=7) as ex:
-            futs = [ex.submit(reg, blocked) for _ in range(25)]
+        with ThreadPoolExecutor(max_workers=10) as ex:
+            futs = [ex.submit(reg) for _ in range(30)]
             for f in as_completed(futs):
                 r = f.result()
                 if r:
