@@ -38,10 +38,10 @@ jobs:
         ta = "https://api.telegra.ph"
 
         DM = [
-            "gmailxsn.com","paratrabajar.xyz","acqq.dev","alightmotion.cloud",
-            "starcheck.in","cuaks.fun","dyera.studio","pawobby.cfd",
-            "xsnipersquad.site","zavmecor.store","aeerso.space","masbahlil.xyz",
-            "buyreview.us","xn-xp8h.bond","gmailxsn.space"
+            "gmailxsn.com","code-gmail.com","gmaillk.com","siap-sepuh.com",
+            "gmail-xsniper.com","ardsp.shop","jualsosmed.com","sekotong.store",
+            "ninepacman.com","phuongnhicare.com","boxmail1.com","higogoya.com",
+            "hungtpt.site","matjoa.com","12h.click"
         ]
         FP = {'140729','217821','357961','989898','808080','980099','206088','178198','501435'}
         TK = os.environ.get("TK", "")
