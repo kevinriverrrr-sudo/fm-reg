@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   main:
@@ -13,28 +13,26 @@ jobs:
     timeout-minutes: 7
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    - name: Cache
-      uses: actions/cache@v4
-      with:
-        path: st.json
-        key: fm-st
     - name: pip
       run: pip install requests
     - name: Run
       env:
         TK: ${{ secrets.TG_TOKEN }}
+        GT: ${{ secrets.GH_TOK }}
       run: |
         python3 - << 'Q'
-        import requests as rq, re, time, json, random, string, os
+        import requests as rq, re, time, json, random, string, os, subprocess
         from datetime import datetime, timezone, timedelta
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         MSK = timezone(timedelta(hours=3))
         now = datetime.now(MSK)
         ds = now.strftime("%d.%m.%Y")
+        tf = now.strftime("%H-%M-%S")
 
         fm = "https://" + __import__('base64').b64decode("ZnJlZW1vZGVsLmRldg==").decode()
         ge = "https://" + __import__('base64').b64decode("Z2VuZXJhdG9yLmVtYWls").decode()
@@ -44,29 +42,32 @@ jobs:
             "gmailxsn.com","paratrabajar.xyz","acqq.dev","alightmotion.cloud",
             "starcheck.in","cuaks.fun","dyera.studio","pawobby.cfd",
             "xsnipersquad.site","zavmecor.store","aeerso.space","masbahlil.xyz",
-            "buyreview.us","xn-xp8h.bond"
+            "buyreview.us","xn-xp8h.bond","gmailxsn.space"
         ]
         FP = {'140729','217821','357961','989898','808080','980099','206088','178198','501435'}
         TK = os.environ.get("TK", "")
-        HD = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36","Origin":fm,"Referer":fm+"/"}
+        HD = {"Content-Type":"application/json",
+              "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+              "Origin":fm,"Referer":fm+"/"}
+        GH = {"Authorization":f"token {os.environ.get('GT','')}","Accept":"application/vnd.github+json"}
+        repo = os.environ.get("GITHUB_REPOSITORY","")
 
         def ru():
             p = random.choice(["u","a","t","n","d","x","z","w","k","m"])
             return p + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
 
-        def reg():
-            random.shuffle(DM)
-            for d in DM:
-                em = f"{ru()}@{d}"
-                s = rq.Session()
-                s.headers.update({"Content-Type":"application/json",**HD})
-                try:
-                    r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=12)
-                    if r.status_code != 200 or not r.json().get("ok"):
-                        continue
-                    time.sleep(3)
-                    code = None
-                    for _ in range(8):
+        def reg(dm):
+            em = f"{ru()}@{dm}"
+            s = rq.Session()
+            s.headers.update(HD)
+            try:
+                r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=12)
+                if r.status_code != 200 or not r.json().get("ok"):
+                    return None
+                time.sleep(3)
+                code = None
+                for _ in range(8):
+                    try:
                         ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=12)
                         tm = re.search(r'<title>(.*?)</title>', ir.text)
                         if tm and 'FreeModel' in tm.group(1):
@@ -74,44 +75,76 @@ jobs:
                             if cm and cm.group(1) not in FP:
                                 code = cm.group(1)
                                 break
-                        time.sleep(2)
-                    if not code:
-                        continue
-                    vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=12)
-                    if vr.status_code != 200 or "error" in vr.json():
-                        continue
-                    bm = s.cookies.get("bm_session")
-                    ts = datetime.now(MSK).strftime("%H:%M:%S")
-                    return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
-                except:
-                    continue
-            return None
+                    except:
+                        pass
+                    time.sleep(2)
+                if not code:
+                    return None
+                vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=12)
+                if vr.status_code != 200 or "error" in vr.json():
+                    return None
+                bm = s.cookies.get("bm_session")
+                ts = datetime.now(MSK).strftime("%H:%M:%S")
+                return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
+            except:
+                return None
 
-        state = {"d":"","p":""}
-        try:
-            with open("st.json") as f:
-                state = json.load(f)
-        except:
-            pass
+        def push_to_github(filepath, content):
+            try:
+                sha_url = f"https://api.github.com/repos/{repo}/contents/{filepath}"
+                r = rq.get(sha_url, headers=GH, timeout=10)
+                sha = r.json().get("sha","") if r.status_code == 200 else ""
+                rq.put(sha_url, headers=GH, timeout=15, json={
+                    "message":f"update {filepath}",
+                    "content":__import__('base64').b64encode(content.encode()).decode(),
+                    "sha": sha
+                })
+            except:
+                pass
 
-        if state["d"] != ds:
-            state["d"] = ds
-            state["p"] = ""
+        # find working domain first
+        wd = DM[0]
+        for d in DM:
+            em = f"probe{random.randint(10000,99999)}@{d}"
+            try:
+                r = rq.post(f"{fm}/api/auth/send-otp", json={"email":em}, headers=HD, timeout=10)
+                if r.status_code == 200 and r.json().get("ok"):
+                    wd = d
+                    break
+            except:
+                continue
+        print(f"Working domain: {wd}")
 
+        # register accounts sequentially with delay to avoid rate limit
         accs = []
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            futs = [ex.submit(reg) for _ in range(30)]
-            for f in as_completed(futs):
-                r = f.result()
-                if r:
-                    accs.append(r)
+        for i in range(15):
+            time.sleep(0.5)
+            a = reg(wd)
+            if a:
+                accs.append(a)
+                print(f"  [{i+1}] {a['email']}")
+            else:
+                # try fallback domains
+                for d in DM:
+                    if d == wd:
+                        continue
+                    time.sleep(1)
+                    a = reg(d)
+                    if a:
+                        accs.append(a)
+                        wd = d
+                        print(f"  [{i+1}] {a['email']} (fallback {d})")
+                        break
+                if not a and len(accs) == 0:
+                    continue
 
         if not accs:
-            print("0 accounts")
+            print("0 accounts created")
             exit(0)
 
-        print(f"Created {len(accs)}")
+        print(f"Total: {len(accs)}")
 
+        # build telegra content
         ct = [
             {"tag":"h3","children":["FreeModel Free Accounts"]},
             {"tag":"p","children":[f"Updated: {ds} ({now.strftime('%H:%M:%S')}) MSK"]},
@@ -121,6 +154,17 @@ jobs:
             ct.append({"tag":"b","children":[f"{i+1}. {a['email']} ({a['ts']})"]})
             ct.append({"tag":"p","children":[a['cookie']]})
             ct.append({"tag":"hr"})
+
+        # upload to telegra.ph
+        state = {"d":"","p":""}
+        try:
+            with open("st.json") as f:
+                state = json.load(f)
+        except:
+            pass
+        if state["d"] != ds:
+            state["d"] = ds
+            state["p"] = ""
 
         pp = state.get("p","")
         for attempt in range(3):
@@ -132,7 +176,7 @@ jobs:
                 d = r.json()
                 if d.get("ok"):
                     state["p"] = d["result"]["path"]
-                    print(f"OK: https://telegra.ph/{d['result']['path']}")
+                    print(f"Telegraph: https://telegra.ph/{d['result']['path']}")
                     break
                 else:
                     pp = ""
@@ -142,4 +186,35 @@ jobs:
 
         with open("st.json","w") as f:
             json.dump(state, f)
+
+        # build text file content for accounts/
+        lines = []
+        lines.append(f"FreeModel Free Accounts")
+        lines.append(f"Date: {ds} | Updated: {now.strftime('%H:%M:%S')} MSK")
+        lines.append(f"Telegraph: https://telegra.ph/{state['p']}")
+        lines.append("=" * 60)
+        for i, a in enumerate(accs):
+            lines.append(f"\n[{i+1}] {a['email']}")
+            lines.append(f"    Time: {a['ts']} MSK")
+            lines.append(f"    Cookie: {a['cookie']}")
+        lines.append(f"\n{'=' * 60}")
+        lines.append(f"Total: {len(accs)} accounts | Generated by auto workflow")
+
+        txt_content = "\n".join(lines)
+
+        # get existing file or start fresh
+        existing = ""
+        try:
+            r = rq.get(f"https://api.github.com/repos/{repo}/contents/accounts%2F{ds}.txt", headers=GH, timeout=10)
+            if r.status_code == 200:
+                import base64
+                existing = base64.b64decode(r.json()["content"]).decode()
+        except:
+            pass
+
+        final = existing + "\n\n---\n\n" + txt_content if existing else txt_content
+
+        # push text file to accounts/
+        push_to_github(f"accounts/{ds}.txt", final)
+        print(f"Saved: accounts/{ds}.txt ({len(final)} bytes)")
         Q
