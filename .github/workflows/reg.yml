@@ -1,0 +1,150 @@
+name: Auto
+on:
+  schedule:
+    - cron: '*/3 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Cache
+      uses: actions/cache@v4
+      with:
+        path: st.json
+        key: fm-st
+    - name: pip
+      run: pip install pynacl requests
+    - name: Run
+      env:
+        TK: ${{ secrets.TG_TOKEN }}
+      run: |
+        python3 - << 'Q'
+        import requests as rq, re, time, json, random, string, os
+        from datetime import datetime, timezone, timedelta
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        MSK = timezone(timedelta(hours=3))
+        now = datetime.now(MSK)
+        ds = now.strftime("%d.%m.%Y")
+
+        fm = "https://" + __import__('base64').b64decode("ZnJlZW1vZGVsLmRldg==").decode()
+        ge = "https://" + __import__('base64').b64decode("Z2VuZXJhdG9yLmVtYWls").decode()
+        ta = "https://api.telegra.ph"
+
+        DM = [
+            "gmailxsn.com","paratrabajar.xyz","acqq.dev","alightmotion.cloud",
+            "starcheck.in","cuaks.fun","dyera.studio","pawobby.cfd",
+            "xsnipersquad.site","zavmecor.store"
+        ]
+        FP = {'140729','217821','357961','989898','808080','980099','206088','178198','501435'}
+        TK = os.environ.get("TK", "")
+        HD = {"User-Agent":"Mozilla/5.0","Origin":fm,"Referer":fm+"/"}
+
+        def ru():
+            p = random.choice(["u","a","t","n","d","x","z","w","k","m"])
+            return p + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+
+        def reg(di):
+            for d in DM:
+                if d in di:
+                    continue
+                em = f"{ru()}@{d}"
+                s = rq.Session()
+                s.headers.update({"Content-Type":"application/json",**HD})
+                try:
+                    r = s.post(f"{fm}/api/auth/send-otp", json={"email":em}, timeout=15)
+                    if r.status_code != 200 or not r.json().get("ok"):
+                        continue
+                    time.sleep(4)
+                    code = None
+                    for _ in range(10):
+                        ir = rq.get(f"{ge}/{em}", headers={"User-Agent":HD["User-Agent"]}, timeout=15)
+                        tm = re.search(r'<title>(.*?)</title>', ir.text)
+                        if tm and 'FreeModel' in tm.group(1):
+                            cm = re.search(r'(\d{6})', tm.group(1))
+                            if cm and cm.group(1) not in FP:
+                                code = cm.group(1)
+                                break
+                        time.sleep(2)
+                    if not code:
+                        continue
+                    time.sleep(1)
+                    vr = s.post(f"{fm}/api/auth/verify-otp", json={"email":em,"code":code}, timeout=15)
+                    if vr.status_code != 200 or "error" in vr.json():
+                        continue
+                    bm = s.cookies.get("bm_session")
+                    ts = datetime.now(MSK).strftime("%H:%M:%S")
+                    return {"email":em,"cookie":f"bm_session={bm or 'none'}","ts":ts}
+                except:
+                    continue
+                break
+            return None
+
+        state = {"d":"","p":""}
+        try:
+            with open("st.json") as f:
+                state = json.load(f)
+        except:
+            pass
+
+        np = False
+        if state["d"] != ds:
+            state["d"] = ds
+            state["p"] = ""
+            np = True
+
+        blocked = set()
+        accs = []
+        with ThreadPoolExecutor(max_workers=7) as ex:
+            futs = [ex.submit(reg, blocked) for _ in range(25)]
+            for f in as_completed(futs):
+                r = f.result()
+                if r:
+                    accs.append(r)
+
+        if not accs:
+            print("0 accounts")
+            exit(0)
+
+        print(f"Created {len(accs)}")
+
+        ct = [
+            {"tag":"h3","children":["FreeModel Free Accounts"]},
+            {"tag":"p","children":[f"Updated: {ds} ({now.strftime('%H:%M:%S')}) MSK"]},
+            {"tag":"hr"},
+        ]
+        for i, a in enumerate(accs):
+            ct.append({"tag":"b","children":[f"{i+1}. {a['email']} ({a['ts']})"]})
+            ct.append({"tag":"p","children":[a['cookie']]})
+            ct.append({"tag":"hr"})
+
+        pp = state.get("p","")
+        for attempt in range(3):
+            try:
+                if pp:
+                    r = rq.post(f"{ta}/editPage", json={"access_token":TK,"path":pp,"title":f"FM {ds}","content":ct,"return_content":False}, timeout=15)
+                else:
+                    r = rq.post(f"{ta}/createPage", json={"access_token":TK,"title":f"FM {ds}","author_name":"FM","content":ct,"return_content":False}, timeout=15)
+                d = r.json()
+                if d.get("ok"):
+                    state["p"] = d["result"]["path"]
+                    print(f"OK: https://telegra.ph/{d['result']['path']}")
+                    break
+                else:
+                    pp = ""
+                    time.sleep(2)
+            except:
+                time.sleep(2)
+
+        with open("st.json","w") as f:
+            json.dump(state, f)
+        Q
